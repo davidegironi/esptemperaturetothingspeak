@@ -50,6 +50,9 @@ static unsigned long senddataLast = 0;
 //last written data
 static float lastdatatemp[ADC_ENABLEDCHANNELS];
 
+//current channel sent to thingspeak
+static uint8_t sendthingspeakchannel = 1;
+
 // Initialize the client library
 WiFiClient client;
 
@@ -148,29 +151,57 @@ String getLastdata() {
  */
 void sendDataToThingSpeak() {
 #if SERIAL_ENABLED == 1
-  Serial.print("Sending data to ThingSpeak...");
+  Serial.println("Sending data to ThingSpeak...");
 #endif
 
-  uint8_t allsent = 1;
+  //check if all channels are invalid
+  uint8_t allinvalid = 1;
   for(uint8_t channel = 0; channel<ADC_ENABLEDCHANNELS; channel++) {
     if(lastdatatemp[channel] != TEMP_INVALID) {
-      int httpCode = ThingSpeak.writeField(atol(eepromConfig.thingspeakchannelid), (channel + 1), (float)(lastdatatemp[channel]), eepromConfig.thingspeakapikey);
-      if (httpCode == 200) {
+      allinvalid = 0;
+      break;
+    }
+  }
+  if(allinvalid)
+    digitalWrite(THINGSPEAK_STATUSLEDPIN, LOW);
+
+  //send data
+  for(uint8_t channel = 0; channel<ADC_ENABLEDCHANNELS; channel++) {
+    if(lastdatatemp[channel] != TEMP_INVALID) {
+      //only send one channel each call
+      if(channel + 1 == sendthingspeakchannel) {
+        int httpCode = ThingSpeak.writeField(atol(eepromConfig.thingspeakchannelid), (channel + 1), (float)(lastdatatemp[channel]), eepromConfig.thingspeakapikey);
+        if (httpCode == 200) {
+          digitalWrite(THINGSPEAK_STATUSLEDPIN, HIGH);
 #if SERIAL_ENABLED == 1
-        Serial.print("Channel "); Serial.print(channel + 1); Serial.println(" succesfully sent");
+          Serial.print("Channel "); Serial.print(channel + 1); Serial.println(" succesfully sent");
 #endif
-      } else {
-        allsent = 0;
+        } else {
+          digitalWrite(THINGSPEAK_STATUSLEDPIN, LOW);
 #if SERIAL_ENABLED == 1
-        Serial.print("Channel "); Serial.print(channel + 1); Serial.println(" sent with error " + String(httpCode));
+          Serial.print("Channel "); Serial.print(channel + 1); Serial.println(" sent with error " + String(httpCode));
 #endif
+        }
+        sendthingspeakchannel++;
+        break;
+      }
+    } else {
+      if(channel + 1 == sendthingspeakchannel) {
+        //skip to next sent
+        sendthingspeakchannel++;
+        if(!allinvalid) {
+#if SERIAL_ENABLED == 1
+          Serial.println("Skip to next channel");
+#endif
+          senddataLast = millis() + THINGSPEAK_SENDDATAINTERVALMS;
+        }
+        break;
       }
     }
   }
-  if(allsent)
-    digitalWrite(THINGSPEAK_STATUSLEDPIN, HIGH);
-  else
-    digitalWrite(THINGSPEAK_STATUSLEDPIN, LOW);
+
+  if(sendthingspeakchannel > ADC_ENABLEDCHANNELS)
+    sendthingspeakchannel = 1;
 }
 
 /**

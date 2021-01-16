@@ -77,7 +77,7 @@ Please refer to LICENSE file for licensing information.
 #define ADC_EMAFILTERALPHA 50
 
 //send data to thingspeak interval ms
-#define THINGSPEAK_SENDDATAINTERVALMS 60000
+#define THINGSPEAK_SENDDATAINTERVALMS 30000
 //connection status led
 #define THINGSPEAK_STATUSLEDPIN 14
 
